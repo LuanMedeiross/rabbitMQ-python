@@ -49,6 +49,14 @@ pip install -r requirements.txt
 
 A criptografia das mensagens é feita usando uma chave específica. O processo utiliza a operação XOR entre os valores ASCII da entrada e da chave, garantindo que apenas quem possui a chave possa descriptografar as mensagens.
 
+## Colaboradores 
+- Aliffer Corrêa
+- Paulo Moretti
+- Fabricio
+- Felipe Feitosa
+- João Vitor
+- Kauan Rodrigues
+
 ## Considerações Finais
 
 Sinta-se à vontade para modificar e melhorar este projeto. Para dúvidas ou sugestões, entre em contato.
