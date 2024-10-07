@@ -54,7 +54,7 @@ A criptografia das mensagens é feita usando uma chave específica. O processo u
 - Paulo Moretti
 - Fabricio
 - Felipe Feitosa
-- João Vitor
+- João Avelino
 - Kauan Rodrigues
 
 ## Considerações Finais
