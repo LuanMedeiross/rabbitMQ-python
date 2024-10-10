@@ -52,7 +52,7 @@ A criptografia das mensagens é feita usando uma chave específica. O processo u
 ## Colaboradores 
 - Aliffer Corrêa
 - Paulo Moretti
-- Fabricio
+- Fabricio Gonçalves
 - Felipe Feitosa
 - João Avelino
 - Kauan Rodrigues
