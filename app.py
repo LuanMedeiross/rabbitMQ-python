@@ -85,7 +85,7 @@ def show_chat(nome, usuario):
     """
     while True:
         sleep(2)
-        #system('cls')  # No Linux, use 'clear' em vez de 'cls'
+        system('cls')  # No Linux, use 'clear' em vez de 'cls'
 
         print(COR['verde'] + '=' * 20 + '\t' + nome + '  |  ' + usuario + '\t' + '=' * 20 + '\n' + COR['x'])
 
@@ -128,7 +128,6 @@ def consumir(channel, nome, usuario):
     """
     def callback(ch, method, properties, body):
 
-        print(body)
         data = json.loads(body)
 
         quem_enviou = data['quem_enviou']
@@ -208,7 +207,7 @@ def menu(nome, channel):
         channel: Canal de comunicação RabbitMQ.
     """
     while True:
-        #system('cls')  # No Linux, use 'clear'
+        system('cls')  # No Linux, use 'clear'
         banner()
 
         print(COR['verde'])
