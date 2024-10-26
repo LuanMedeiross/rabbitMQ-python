@@ -1,3 +1,6 @@
+# Chave para criptografia
+CHAVE = "a4-1=2+%@!SC12D1@"
+
 # Converte cada caractere da string em seu valor numérico (valor ASCII)
 def dex(texto):
     return [ord(t) for t in texto]  # 'ord' converte um caractere em um número inteiro ASCII
@@ -29,7 +32,5 @@ def encrypt(entrada, chave):
 
 if __name__ == '__main__':
 
-    chave = "?:><,#.;/^}]~`[$\\]-=+_!@%¨&*()"
-
-    mensagem_criptografada = encrypt("te amo linda", chave)
+    mensagem_criptografada = encrypt("bom dia, companheiro!", CHAVE)
     print(f(mensagem_criptografada))
