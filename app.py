@@ -1,69 +1,37 @@
 #!/usr/bin/env python
-import pika
-import requests
 import json
 
+from chat import * # Importando funções de chat
 from time import sleep
-from os import system
 from threading import Thread
-from criptografia import encrypt # Funções de criptografia 
-
-# Configurações do servidor AMQP (RabbitMQ)
-AMQP = {
-    'url': 'https://jackal.rmq.cloudamqp.com/',
-    'host': "jackal-01.rmq.cloudamqp.com",
-    'port': 5672,
-    'username': "oejhcyan",
-    'password': "sIsCKGekFXYFbmf5L4ssP_Vg--lq7yAM"
-}
-
-# Cores para formatação no terminal
-COR = {
-    'vermelho': '\033[3;31m',
-    'verde': '\033[3;32m',
-    'amarelo': '\033[3;33m',
-    'azul': '\033[3;34m',
-    'x': '\033[m'
-}
-
-# Chave para criptografia
-CHAVE = "asdjASsdfASC12D1@"
+from criptografia import encrypt, CHAVE  # Importando criptografia pelo criptografia.py
+from rabbit import channel, enviar, get_usuarios # Importando conexão e configuração pelo rabbit.py
 
 # Histórico de mensagens
 historico = []
-
-def connection():
-    """
-    Estabelece conexão com o servidor RabbitMQ e retorna o canal.
-    """
-    connection_parameters = pika.ConnectionParameters(
-        host=AMQP['host'],
-        port=AMQP['port'], 
-        credentials=pika.PlainCredentials(
-            username=AMQP['username'],
-            password=AMQP['password']
-        ),
-        virtual_host=AMQP['username']
-    )
-
-    connection = pika.BlockingConnection(connection_parameters)
-    return connection.channel()
 
 def main():
     """
     Função principal do programa. Inicializa o banner, solicita o nome do usuário,
     estabelece conexão com o RabbitMQ e inicia o menu de opções.
     """
-    banner()
-    nome = input("\n\nUsername: ").lower()
-    global usuario
+    try:
+        banner()
+        p_green("Username: ", end='')
+        nome = input().lower()
+        global usuario
 
-    channel = connection()
-    menu(nome, channel)
-    start_chat(channel, nome, usuario)
-    show_chat(nome, usuario)
+        menu(nome)
+        
+        start_chat(nome, usuario)
+        show_chat(nome, usuario)
+    except KeyboardInterrupt:
+        p_red("Encerrando programa ...")
+        channel.stop_consuming()
+        exit()
 
-def start_chat(channel, nome, usuario):
+
+def start_chat(nome, usuario):
     """
     Inicia duas threads para consumo e publicação de mensagens no chat.
 
@@ -72,8 +40,8 @@ def start_chat(channel, nome, usuario):
         nome: Nome do usuário local.
         usuario: Nome do usuário remoto.
     """
-    Thread(target=consumir, args=(channel, nome, usuario,)).start()
-    Thread(target=publicar, args=(channel, usuario, nome,)).start()
+    Thread(target=consumir, args=(nome, usuario,)).start()
+    Thread(target=publicar, args=(usuario, nome,)).start()
 
 def show_chat(nome, usuario):
     """
@@ -85,14 +53,18 @@ def show_chat(nome, usuario):
     """
     while True:
         sleep(2)
-        system('cls')  # No Linux, use 'clear' em vez de 'cls'
+        clear()
 
-        print(COR['verde'] + '=' * 20 + '\t' + nome + '  |  ' + usuario + '\t' + '=' * 20 + '\n' + COR['x'])
+        p_green('=' * 25 + '   \t' + nome + '  |  ' + usuario + '\t\t' +  25 * '=')
+        p_red('/sair para sair\n\n')
 
         for mensagem in historico:
-            print(mensagem)
+            if mensagem.split()[0] == f'[{nome}]':
+                p_blue(mensagem)
+            else:
+                p_yellow(mensagem)
 
-def publicar(channel, usuario, nome):
+def publicar(usuario, nome):
     """
     Função para enviar mensagens criptografadas no chat.
 
@@ -101,23 +73,22 @@ def publicar(channel, usuario, nome):
         usuario: Nome do usuário remoto.
         nome: Nome do usuário local.
     """
-    while True:
-        mensagem = input(": ")
-        mensagem_criptografada = encrypt(mensagem, chave=CHAVE)
+    try:
+        while True:
+            mensagem = input(": ")
+            
+            mensagem_criptografada = encrypt(mensagem, chave=CHAVE)
 
-        data = json.dumps({'quem_enviou': nome, 'mensagem': mensagem_criptografada})
+            data = json.dumps({'quem_enviou': nome, 'mensagem': mensagem_criptografada})
 
-        channel.basic_publish(
-            exchange='data_exchange',
-            routing_key=usuario,
-            body=data,
-            properties=pika.BasicProperties(delivery_mode=2)
-        )
+            enviar(usuario, data)
 
-        linha = f'{COR["azul"]}[{nome}] {mensagem}{COR["x"]}'
-        historico.append(linha)
+            linha = f'[{nome}] {mensagem}'
+            historico.append(linha)
+    except EOFError:
+        pass
 
-def consumir(channel, nome, usuario):
+def consumir(nome, usuario):
     """
     Função para consumir mensagens do chat de forma criptografada e adicionar ao histórico.
 
@@ -135,24 +106,11 @@ def consumir(channel, nome, usuario):
         mensagem_descriptografa = encrypt(mensagem, chave=CHAVE)
 
         if quem_enviou == usuario:
-            linha = f'{COR["amarelo"]}[{usuario}] {mensagem_descriptografa}{COR["x"]}'
+            linha = f"[{usuario}] {mensagem_descriptografa}"
             historico.append(linha)
 
     channel.basic_consume(queue=nome, on_message_callback=callback, auto_ack=True)
     channel.start_consuming()
-
-def get_usuarios():
-    """
-    Retorna uma lista de usuários registrados no servidor RabbitMQ.
-    
-    Returns:
-        List[str]: Lista de nomes de usuários registrados.
-    """
-    url = AMQP['url'] + '/api/queues/' + AMQP['username']
-    response = requests.get(url, auth=(AMQP['username'], AMQP['password']))
-    
-    usuarios = [q['name'] for q in response.json()]
-    return usuarios
 
 def configure_chat(nome, channel):
     """
@@ -162,7 +120,7 @@ def configure_chat(nome, channel):
         nome: Nome do usuário local.
         channel: Canal de comunicação RabbitMQ.
     """
-    print(f'\n{COR["vermelho"]}{nome} iniciou um chat com {usuario}')
+    p_yellow(f"\n{nome} iniciou um chat com {usuario}")
 
     channel.exchange_declare(exchange='data_exchange', durable=True, exchange_type='direct')
     channel.queue_declare(queue=usuario, durable=True)
@@ -185,20 +143,8 @@ def usuarioExiste(usuarios):
         if u == usuario:
             usuario_cadastrado = True
     return usuario_cadastrado
-
-def banner():
-    """
-    Exibe um banner ASCII no terminal.
-    """
-    print(COR['verde'])
-    print('    ____        __    __    _ __  __  _______  ________  _____  ______')
-    print('   / __ \\____ _/ /_  / /_  (_) /_/  |/  / __ \\/ ____/ / / /   |/_  __/')
-    print('  / /_/ / __ `/ __ \\/ __ \\/ / __/ /|_/ / / / / /   / /_/ / /| | / /   ')
-    print(' / _, _/ /_/ / /_/ / /_/ / / /_/ /  / / /_/ / /___/ __  / ___ |/ /    ')
-    print('/_/ |_|\\__,_/_.___/_.___/_/\\__/_/  /_/\\___\\_\\____/_/ /_/_/  |_/_/  ')
-    print(COR['x'])
-
-def menu(nome, channel):
+    
+def menu(nome):
     """
     Exibe o menu de opções do chat e lida com as interações do usuário.
 
@@ -207,43 +153,45 @@ def menu(nome, channel):
         channel: Canal de comunicação RabbitMQ.
     """
     while True:
-        system('cls')  # No Linux, use 'clear'
+        clear()
         banner()
+        
+        p_yellow("Usuário: " + nome)
+        p_green("\n[1] - Listar usuários")
+        p_green("[2] - Iniciar chat")
+        p_green("[3] - Sair")
 
-        print(COR['verde'])
-        print('\n')
-        print("Usuário:", nome)
-        print('\n')
-        print("[1] - Listar usuários")
-        print("[2] - Iniciar chat")
-        print("[3] - Sair")
-
-        opcao = int(input('\n\nOpção: '))
+        p_yellow("\n[opt]: ", end='')
+        opcao = input()
         usuarios = get_usuarios()
 
-        if opcao == 1:
-            print('\n ----------- LISTA DE USUÁRIOS REGISTRADOS -----------' + COR['amarelo'])
+        if opcao == '1':
+            p_green('\n ----------- LISTA DE USUÁRIOS REGISTRADOS -----------\n')
             for user in usuarios:
-                print(user)
-            input(COR['x'] + '\nPressione ENTER')
+                p_yellow(user)
+            p_yellow('\nPressione ENTER')
+            input()
 
-        elif opcao == 2:
+        elif opcao == '2':
             global usuario
-            usuario = input("\nDigite o nome do usuário: ").lower()
+            p_yellow("\nChat: ", end='')
+            usuario = input().lower()
 
             if usuarioExiste(usuarios):
                 configure_chat(nome, channel)
                 break
             else:
-                print('\nEste usuário não existe!\n')
-                input('Pressione ENTER')
+                p_red('\nEste usuário não existe!\n')
+                p_yellow('Pressione ENTER')
+                input()
 
-        elif opcao == 3:
-            print(f"\nVolte sempre {nome}:)\n")
-            input("Pressione ENTER para sair ")
+        elif opcao == '3':
+            p_yellow(f"\nVolte sempre, {nome} :)\n")
             quit()
-
-    print(COR['x'])
+        
+        else:
+            p_red("\nOpção invalida [ENTER]")
+            input()
 
 if __name__ == "__main__":
     main()
