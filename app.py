@@ -166,7 +166,7 @@ def menu(nome):
         usuarios = get_usuarios()
 
         if opcao == '1':
-            p_green('\n ----------- LISTA DE USUÁRIOS REGISTRADOS -----------\n')
+            p_green('\n ---------------------- LISTA DE USUÁRIOS REGISTRADOS ----------------------\n')
             for user in usuarios:
                 p_yellow(user)
             p_yellow('\nPressione ENTER')
