@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import pika
 import requests
+import json
 
 from time import sleep
 from os import system
@@ -37,7 +38,7 @@ def connection():
     """
     connection_parameters = pika.ConnectionParameters(
         host=AMQP['host'],
-        port=AMQP['port'],
+        port=AMQP['port'], 
         credentials=pika.PlainCredentials(
             username=AMQP['username'],
             password=AMQP['password']
@@ -84,7 +85,7 @@ def show_chat(nome, usuario):
     """
     while True:
         sleep(2)
-        system('cls')  # No Linux, use 'clear' em vez de 'cls'
+        #system('cls')  # No Linux, use 'clear' em vez de 'cls'
 
         print(COR['verde'] + '=' * 20 + '\t' + nome + '  |  ' + usuario + '\t' + '=' * 20 + '\n' + COR['x'])
 
@@ -102,12 +103,14 @@ def publicar(channel, usuario, nome):
     """
     while True:
         mensagem = input(": ")
-        mensagem_criptografado = encrypt(mensagem, chave=CHAVE)
+        mensagem_criptografada = encrypt(mensagem, chave=CHAVE)
+
+        data = json.dumps({'quem_enviou': nome, 'mensagem': mensagem_criptografada})
 
         channel.basic_publish(
             exchange='data_exchange',
             routing_key=usuario,
-            body=nome + '^sep^' + mensagem_criptografado,
+            body=data,
             properties=pika.BasicProperties(delivery_mode=2)
         )
 
@@ -124,7 +127,12 @@ def consumir(channel, nome, usuario):
         usuario: Nome do usuário remoto.
     """
     def callback(ch, method, properties, body):
-        quem_enviou, mensagem = body.decode().split('^sep^')
+
+        print(body)
+        data = json.loads(body)
+
+        quem_enviou = data['quem_enviou']
+        mensagem = data['mensagem']
         mensagem_descriptografa = encrypt(mensagem, chave=CHAVE)
 
         if quem_enviou == usuario:
@@ -200,7 +208,7 @@ def menu(nome, channel):
         channel: Canal de comunicação RabbitMQ.
     """
     while True:
-        system('cls')  # No Linux, use 'clear'
+        #system('cls')  # No Linux, use 'clear'
         banner()
 
         print(COR['verde'])
