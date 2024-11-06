@@ -49,4 +49,13 @@ def get_usuarios():
     usuarios = [q['name'] for q in response.json()]
     return usuarios
 
+
+def reconnect_channel():
+    # Feche a conexão e abra uma nova
+    channel.close()
+    # Código para criar uma nova conexão
+    channel = pika.BlockingConnection(pika.ConnectionParameters(host='localhost')).channel()
+
+
 channel = connection()
+

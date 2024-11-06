@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 import json
+import pika.exceptions
 
 from chat import * # Importando funções de chat
 from time import sleep
 from threading import Thread
 from criptografia import encrypt, CHAVE  # Importando criptografia pelo criptografia.py
-from rabbit import channel, enviar, get_usuarios # Importando conexão e configuração pelo rabbit.py
+from rabbit import channel, enviar, get_usuarios, reconnect_channel # Importando conexão e configuração pelo rabbit.py
 
 # Histórico de mensagens
 historico = []
@@ -21,16 +22,15 @@ def main(rload = False):
     """
 
     global nome
+    global usuario
 
     try:
         if (not rload):
             banner()
             p_green("Username: ", end='')
             nome = input().lower()
-            global usuario
 
             menu(nome)
-            
             start_chat(nome, usuario)
             show_chat(nome, usuario)
         else:
@@ -92,31 +92,31 @@ def publicar(usuario, nome):
     """
 
     global thread_active
+    global historico
 
     while thread_active:
-        try:
-            while True:
-                mensagem = input(": ")
-                
-                if mensagem != '/sair':
-                    mensagem_criptografada = encrypt(mensagem, chave=CHAVE)
+        mensagem = input(": ")
+        
+        if mensagem != '/sair':
+            mensagem_criptografada = encrypt(mensagem, chave=CHAVE)
 
-                    data = json.dumps({'quem_enviou': nome, 'mensagem': mensagem_criptografada})
+            data = json.dumps({'quem_enviou': nome, 'mensagem': mensagem_criptografada})
 
-                    enviar(usuario, data)
+            enviar(usuario, data)
 
-                    linha = f'[{nome}] {mensagem}'
-                    historico.append(linha)
-                else:
-                    thread_active = False
+            linha = f'[{nome}] {mensagem}'
+            historico.append(linha)
+        else:
+            thread_active = False
 
-                    usuario = ''
+            historico = []
 
-                    channel.stop_consuming()
-                    main(rload=True)
+            usuario = ''
 
-        except EOFError:
-            pass
+            channel.stop_consuming()
+
+            main(rload=True)
+
 
 def consumir(nome, usuario):
     """
@@ -131,20 +131,28 @@ def consumir(nome, usuario):
     global thread_active
 
     while thread_active:
-        def callback(ch, method, properties, body):
 
-            data = json.loads(body)
+        try:
+            def callback(ch, method, properties, body):
 
-            quem_enviou = data['quem_enviou']
-            mensagem = data['mensagem']
-            mensagem_descriptografa = encrypt(mensagem, chave=CHAVE)
+                data = json.loads(body)
 
-            if quem_enviou == usuario:
-                linha = f"[{usuario}] {mensagem_descriptografa}"
-                historico.append(linha)
+                quem_enviou = data['quem_enviou']
+                mensagem = data['mensagem']
+                mensagem_descriptografa = encrypt(mensagem, chave=CHAVE)
 
-        channel.basic_consume(queue=nome, on_message_callback=callback, auto_ack=True)
-        channel.start_consuming()
+                if quem_enviou == usuario:
+                    linha = f"[{usuario}] {mensagem_descriptografa}"
+                    historico.append(linha)
+
+            channel.basic_consume(queue=nome, on_message_callback=callback, auto_ack=True)
+            channel.start_consuming()
+        except pika.exceptions.StreamLostError:
+            print("Conexão perdida. Tentando reconectar...")
+            reconnect_channel()  # Função para recriar o canal ou conexão com RabbitMQ
+        except Exception as e:
+            print(f"Erro ao consumir mensagem: {e}")
+    
 
 def configure_chat(nome, channel):
     """
@@ -186,6 +194,9 @@ def menu(nome):
         nome: Nome do usuário local.
         channel: Canal de comunicação RabbitMQ.
     """
+
+    global usuario
+
     while True:
         clear()
         banner()
@@ -196,36 +207,43 @@ def menu(nome):
         p_green("[3] - Sair")
 
         p_yellow("\n[opt]: ", end='')
-        opcao = input()
+
         usuarios = get_usuarios()
 
-        if opcao == '1':
-            p_green('\n ---------------------- LISTA DE USUÁRIOS REGISTRADOS ----------------------\n')
-            for user in usuarios:
-                p_yellow(user)
-            p_yellow('\nPressione ENTER')
-            input()
-
-        elif opcao == '2':
-            global usuario
-            p_yellow("\nChat: ", end='')
-            usuario = input().lower()
-
-            if usuarioExiste(usuarios):
-                configure_chat(nome, channel)
-                break
-            else:
-                p_red('\nEste usuário não existe!\n')
-                p_yellow('Pressione ENTER')
+        try:
+            opcao = int(input())
+            
+            if opcao == 1:
+                p_green('\n ---------------------- LISTA DE USUÁRIOS REGISTRADOS ----------------------\n')
+                for user in usuarios:
+                    p_yellow(user)
+                p_yellow('\nPressione ENTER')
                 input()
 
-        elif opcao == '3':
-            p_yellow(f"\nVolte sempre, {nome} :)\n")
-            quit()
+            elif opcao == 2:
+                global usuario
+                p_yellow("\nChat: ", end='')
+                usuario = input().lower()
+
+                if usuarioExiste(usuarios):
+                    configure_chat(nome, channel)
+                    break
+                else:
+                    p_red('\nEste usuário não existe!\n')
+                    p_yellow('Pressione ENTER')
+                    input()
+
+            elif opcao == 3:
+                p_yellow(f"\nVolte sempre, {nome} :)\n")
+                quit()
+            
+            else:
+                p_red("\nOpção invalida [ENTER]")
+                input()
         
-        else:
-            p_red("\nOpção invalida [ENTER]")
-            input()
+        except ValueError:
+            pass
+    
 
 if __name__ == "__main__":
     main()
