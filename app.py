@@ -10,25 +10,37 @@ from rabbit import channel, enviar, get_usuarios # Importando conexão e configu
 # Histórico de mensagens
 historico = []
 
-def main():
+thread_active = False
+
+nome = ''
+
+def main(rload = False):
     """
     Função principal do programa. Inicializa o banner, solicita o nome do usuário,
     estabelece conexão com o RabbitMQ e inicia o menu de opções.
     """
-    try:
-        banner()
-        p_green("Username: ", end='')
-        nome = input().lower()
-        global usuario
 
-        menu(nome)
-        
-        start_chat(nome, usuario)
-        show_chat(nome, usuario)
+    global nome
+
+    try:
+        if (not rload):
+            banner()
+            p_green("Username: ", end='')
+            nome = input().lower()
+            global usuario
+
+            menu(nome)
+            
+            start_chat(nome, usuario)
+            show_chat(nome, usuario)
+        else:
+            menu(nome)
+            start_chat(nome, usuario)
+            show_chat(nome, usuario)
     except KeyboardInterrupt:
         p_red("Encerrando programa ...")
         channel.stop_consuming()
-        exit()
+        exit()    
 
 
 def start_chat(nome, usuario):
@@ -40,6 +52,11 @@ def start_chat(nome, usuario):
         nome: Nome do usuário local.
         usuario: Nome do usuário remoto.
     """
+
+    global thread_active
+
+    thread_active = True
+
     Thread(target=consumir, args=(nome, usuario,)).start()
     Thread(target=publicar, args=(usuario, nome,)).start()
 
@@ -51,7 +68,7 @@ def show_chat(nome, usuario):
         nome: Nome do usuário local.
         usuario: Nome do usuário remoto.
     """
-    while True:
+    while thread_active:
         sleep(2)
         clear()
 
@@ -73,20 +90,33 @@ def publicar(usuario, nome):
         usuario: Nome do usuário remoto.
         nome: Nome do usuário local.
     """
-    try:
-        while True:
-            mensagem = input(": ")
-            
-            mensagem_criptografada = encrypt(mensagem, chave=CHAVE)
 
-            data = json.dumps({'quem_enviou': nome, 'mensagem': mensagem_criptografada})
+    global thread_active
 
-            enviar(usuario, data)
+    while thread_active:
+        try:
+            while True:
+                mensagem = input(": ")
+                
+                if mensagem != '/sair':
+                    mensagem_criptografada = encrypt(mensagem, chave=CHAVE)
 
-            linha = f'[{nome}] {mensagem}'
-            historico.append(linha)
-    except EOFError:
-        pass
+                    data = json.dumps({'quem_enviou': nome, 'mensagem': mensagem_criptografada})
+
+                    enviar(usuario, data)
+
+                    linha = f'[{nome}] {mensagem}'
+                    historico.append(linha)
+                else:
+                    thread_active = False
+
+                    usuario = ''
+
+                    channel.stop_consuming()
+                    main(rload=True)
+
+        except EOFError:
+            pass
 
 def consumir(nome, usuario):
     """
@@ -97,20 +127,24 @@ def consumir(nome, usuario):
         nome: Nome do usuário local.
         usuario: Nome do usuário remoto.
     """
-    def callback(ch, method, properties, body):
 
-        data = json.loads(body)
+    global thread_active
 
-        quem_enviou = data['quem_enviou']
-        mensagem = data['mensagem']
-        mensagem_descriptografa = encrypt(mensagem, chave=CHAVE)
+    while thread_active:
+        def callback(ch, method, properties, body):
 
-        if quem_enviou == usuario:
-            linha = f"[{usuario}] {mensagem_descriptografa}"
-            historico.append(linha)
+            data = json.loads(body)
 
-    channel.basic_consume(queue=nome, on_message_callback=callback, auto_ack=True)
-    channel.start_consuming()
+            quem_enviou = data['quem_enviou']
+            mensagem = data['mensagem']
+            mensagem_descriptografa = encrypt(mensagem, chave=CHAVE)
+
+            if quem_enviou == usuario:
+                linha = f"[{usuario}] {mensagem_descriptografa}"
+                historico.append(linha)
+
+        channel.basic_consume(queue=nome, on_message_callback=callback, auto_ack=True)
+        channel.start_consuming()
 
 def configure_chat(nome, channel):
     """
