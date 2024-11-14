@@ -5,7 +5,7 @@ import pika.exceptions
 from chat import * # Importando funções de chat
 from time import sleep
 from threading import Thread
-from criptografia import encrypt, CHAVE  # Importando criptografia pelo criptografia.py
+from criptografia import encrypt  # Importando criptografia pelo criptografia.py
 from rabbit import channel, enviar, get_usuarios, reconnect_channel # Importando conexão e configuração pelo rabbit.py
 
 # Histórico de mensagens
@@ -13,6 +13,7 @@ historico = []
 
 thread_active = False
 
+CHAVE = ''
 nome = ''
 
 def main(rload = False):
@@ -23,10 +24,13 @@ def main(rload = False):
 
     global nome
     global usuario
+    global CHAVE
 
     try:
         if (not rload):
             banner()
+            p_green("Digite a chave: ", end='')
+            CHAVE = input()
             p_green("Username: ", end='')
             nome = input().lower()
 
